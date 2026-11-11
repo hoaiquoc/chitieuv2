@@ -178,9 +178,22 @@ export async function getDailyExpense(tenantId: string, days = 7) {
   return keys.map((day) => ({ day, total: map.get(day) ?? 0 }));
 }
 
+/** Thu/chi từng tháng (giờ VN) trong `months` tháng tính đến `month` — 1 truy vấn. */
 export async function getTrend(tenantId: string, month: string, months = 6) {
   const list = Array.from({ length: months }, (_, i) => shiftMonth(month, i - months + 1));
-  return Promise.all(list.map(async (m) => ({ month: m, ...(await getMonthSummary(tenantId, m)) })));
+  const from = monthRange(list[0]).from;
+  const to = monthRange(month).to;
+  const rows = await all<{ m: string; income: number; expense: number }>(
+    `SELECT substr(datetime(substr(t.occurredAt, 1, 19), '+7 hours'), 1, 7) AS m,
+            COALESCE(SUM(CASE WHEN t.type = 'Income' THEN t.amount END), 0) AS income,
+            COALESCE(SUM(CASE WHEN t.type = 'Expense' THEN t.amount END), 0) AS expense
+     FROM Transactions t
+     WHERE t.tenantId = ? AND t.status = 'Completed' AND t.occurredAt >= ? AND t.occurredAt < ? AND ${NOT_SYSTEM}
+     GROUP BY m`,
+    [tenantId, from, to],
+  );
+  const map = new Map(rows.map((r) => [r.m, r]));
+  return list.map((m) => ({ month: m, income: map.get(m)?.income ?? 0, expense: map.get(m)?.expense ?? 0 }));
 }
 
 export type AlertProgress = {
@@ -194,31 +207,24 @@ export type AlertProgress = {
   spent: number;
 };
 
+/** Hạn mức chi tiêu kèm số đã chi trong chu kỳ hiện tại — 1 truy vấn cho mọi hạn mức. */
 export async function getAlerts(tenantId: string): Promise<AlertProgress[]> {
-  const alerts = await all<Omit<AlertProgress, "spent">>(
-    `SELECT s.id, s.period, s.thresholdAmount, s.categoryId, c.name AS categoryName, c.icon AS categoryIcon, c.color AS categoryColor
+  const d = periodRange("day");
+  const w = periodRange("week");
+  const m = periodRange("month");
+  return all<AlertProgress>(
+    `SELECT s.id, s.period, s.thresholdAmount, s.categoryId,
+            c.name AS categoryName, c.icon AS categoryIcon, c.color AS categoryColor,
+            (SELECT COALESCE(SUM(t.amount), 0) FROM Transactions t
+              WHERE t.tenantId = s.tenantId AND t.status = 'Completed' AND t.type = 'Expense'
+                AND t.occurredAt >= CASE s.period WHEN 'day' THEN ?1 WHEN 'week' THEN ?3 ELSE ?5 END
+                AND t.occurredAt <  CASE s.period WHEN 'day' THEN ?2 WHEN 'week' THEN ?4 ELSE ?6 END
+                AND (CASE WHEN s.categoryId IS NULL THEN ${NOT_SYSTEM} ELSE t.categoryId = s.categoryId END)
+            ) AS spent
      FROM SpendingAlerts s LEFT JOIN Categories c ON c.id = s.categoryId
-     WHERE s.tenantId = ?
+     WHERE s.tenantId = ?7
      ORDER BY CASE s.period WHEN 'day' THEN 1 WHEN 'week' THEN 2 ELSE 3 END, s.createdAt`,
-    [tenantId],
-  );
-  return Promise.all(
-    alerts.map(async (a) => {
-      const r = periodRange(a.period);
-      const args: string[] = [tenantId, r.from, r.to];
-      let cond = NOT_SYSTEM;
-      if (a.categoryId) {
-        cond = "t.categoryId = ?";
-        args.push(a.categoryId);
-      }
-      const row = await one<{ spent: number }>(
-        `SELECT COALESCE(SUM(t.amount), 0) AS spent FROM Transactions t
-         WHERE t.tenantId = ? AND t.status = 'Completed' AND t.type = 'Expense'
-           AND t.occurredAt >= ? AND t.occurredAt < ? AND ${cond}`,
-        args,
-      );
-      return { ...a, spent: row?.spent ?? 0 };
-    }),
+    [d.from, d.to, w.from, w.to, m.from, m.to, tenantId],
   );
 }
 
