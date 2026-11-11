@@ -7,7 +7,7 @@ import type { InStatement } from "@libsql/client";
 import { batch, one, run } from "./db";
 import { createSession, destroySession, hashPassword, requireUser, verifyPassword } from "./auth";
 import { fromLocalInput, initials, nowDb, parseAmount } from "./format";
-import { ASSET_TYPE, getAccounts, SYSTEM_CATEGORIES } from "./queries";
+import { ASSET_TYPE, findTransferPair, getAccounts, SYSTEM_CATEGORIES } from "./queries";
 import { accountColorClass, categoryColorClass, COLOR_NAMES } from "./colors";
 
 export type FormState = { error?: string; ok?: string } | undefined;
@@ -148,18 +148,53 @@ export async function saveTransaction(_: FormState, fd: FormData): Promise<FormS
   if (isAsset && quantity <= 0 && amount <= 0) return { error: `Nhập số lượng (${account.assetUnit})` };
 
   if (kind === "Transfer") {
-    if (id) return { error: "Không sửa được giao dịch chuyển tiền, hãy xóa và tạo lại" };
     const to = accounts.find((a) => a.id === str(fd, "toAccountId"));
     if (!to || to.id === account.id) return { error: "Chọn tài khoản nhận khác tài khoản chuyển" };
     if (amount <= 0) return { error: "Nhập số tiền lớn hơn 0" };
-    const ins = (txId: string, title: string, accId: string, type: string) => ({
+    const title = str(fd, "title");
+
+    if (id) {
+      // Sửa chuyển khoản: cập nhật cả 2 vế (Chi ở tài khoản nguồn, Thu ở tài khoản đích)
+      const tx = await one<{ id: string; type: string; amount: number; occurredAt: string; categoryId: string }>(
+        "SELECT id, type, amount, occurredAt, categoryId FROM Transactions WHERE id = ? AND tenantId = ?",
+        [id, me.tenantId],
+      );
+      if (!tx || tx.categoryId !== "transfer") return { error: "Không tìm thấy giao dịch chuyển khoản" };
+      const pair = await findTransferPair(me.tenantId, tx);
+      const legs = { Expense: tx.type === "Expense" ? tx.id : pair?.id, Income: tx.type === "Income" ? tx.id : pair?.id };
+      const stmts: InStatement[] = [];
+      for (const [type, legId] of Object.entries(legs) as ["Expense" | "Income", string | undefined][]) {
+        const accId = type === "Expense" ? account.id : to.id;
+        const autoTitle = type === "Expense" ? `Chuyển tiền tới ${to.name}` : `Nhận chuyển tiền từ ${account.name}`;
+        if (legId) {
+          // Để trống nội dung = giữ nguyên nội dung cũ của từng vế
+          stmts.push({
+            sql: `UPDATE Transactions SET accountId = ?, amount = ?, occurredAt = ?, note = ?, title = COALESCE(?, title)
+                  WHERE id = ? AND tenantId = ?`,
+            args: [accId, amount, occurredAt, note, title || null, legId, me.tenantId],
+          });
+        } else {
+          // Dữ liệu cũ thiếu 1 vế → tạo bù cho đủ cặp
+          stmts.push({
+            sql: `INSERT INTO Transactions (id, title, accountId, categoryId, amount, type, occurredAt, note, createdBy, status, tenantId)
+                  VALUES (?, ?, ?, 'transfer', ?, ?, ?, ?, ?, 'Completed', ?)`,
+            args: [randomUUID(), title || autoTitle, accId, amount, type, occurredAt, note, me.fullName, me.tenantId],
+          });
+        }
+      }
+      stmts.push(recomputeStmt(me.tenantId));
+      await batch(stmts);
+      done(safeReturn(str(fd, "returnTo"), "/transactions"));
+    }
+
+    const ins = (txId: string, t: string, accId: string, type: string) => ({
       sql: `INSERT INTO Transactions (id, title, accountId, categoryId, amount, type, occurredAt, note, createdBy, status, tenantId)
             VALUES (?, ?, ?, 'transfer', ?, ?, ?, ?, ?, 'Completed', ?)`,
-      args: [txId, title, accId, amount, type, occurredAt, note, me.fullName, me.tenantId],
+      args: [txId, t, accId, amount, type, occurredAt, note, me.fullName, me.tenantId],
     });
     await batch([
-      ins(randomUUID(), str(fd, "title") || `Chuyển tiền tới ${to.name}`, account.id, "Expense"),
-      ins(randomUUID(), str(fd, "title") || `Nhận chuyển tiền từ ${account.name}`, to.id, "Income"),
+      ins(randomUUID(), title || `Chuyển tiền tới ${to.name}`, account.id, "Expense"),
+      ins(randomUUID(), title || `Nhận chuyển tiền từ ${account.name}`, to.id, "Income"),
       recomputeStmt(me.tenantId),
     ]);
     done(safeReturn(str(fd, "returnTo"), "/transactions"));

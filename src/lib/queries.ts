@@ -234,3 +234,19 @@ export async function getMembers(tenantId: string) {
     [tenantId],
   );
 }
+
+/**
+ * Vế còn lại của một giao dịch chuyển khoản (chuyển khoản lưu thành 2 dòng: Chi ở tài khoản nguồn,
+ * Thu ở tài khoản đích, cùng thời gian và số tiền, danh mục 'transfer').
+ */
+export async function findTransferPair(
+  tenantId: string,
+  tx: { id: string; occurredAt: string; amount: number; type: string },
+) {
+  return one<{ id: string; accountId: string; title: string; type: string }>(
+    `SELECT id, accountId, title, type FROM Transactions
+     WHERE tenantId = ? AND categoryId = 'transfer' AND id <> ? AND occurredAt = ? AND amount = ? AND type <> ?
+     LIMIT 1`,
+    [tenantId, tx.id, tx.occurredAt, tx.amount, tx.type],
+  );
+}

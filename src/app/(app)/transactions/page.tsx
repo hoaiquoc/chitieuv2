@@ -90,6 +90,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           </div>
         </div>
 
+        {txs.length > 0 && (
+          <p className="px-1 text-center text-[12px] text-slate-400">Chạm để xem · vuốt sang trái để sửa hoặc xóa</p>
+        )}
+
         <div className="pt-1">
           {txs.length ? (
             <TxGroupedList txs={txs} returnTo={returnTo} />

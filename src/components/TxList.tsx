@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { CategoryIcon } from "./CategoryIcon";
+import { SwipeRow } from "./SwipeRow";
 import { dayKey, dayLabel, formatMoney, formatQty, timeLabel } from "@/lib/format";
 import type { Tx } from "@/lib/queries";
 
 export function TxRow({ tx, returnTo, showDate }: { tx: Tx; returnTo?: string; showDate?: boolean }) {
   const income = tx.type === "Income";
   const href = `/transactions/${tx.id}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+  const confirmText = tx.categoryId === "transfer" ? "Xóa giao dịch chuyển khoản này (cả 2 vế)?" : `Xóa “${tx.title}”?`;
   return (
-    <Link href={href} className="flex items-center gap-3 px-4 py-3 transition active:bg-slate-50">
+    <SwipeRow id={tx.id} editHref={href} returnTo={returnTo ?? "/transactions"} confirmText={confirmText}>
+    <Link href={href} draggable={false} className="flex items-center gap-3 px-4 py-3 transition active:bg-slate-50">
       <CategoryIcon icon={tx.categoryId === "transfer" ? "transfer" : tx.categoryIcon} color={tx.categoryColor} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[15px] font-medium">{tx.title}</p>
@@ -27,6 +30,7 @@ export function TxRow({ tx, returnTo, showDate }: { tx: Tx; returnTo?: string; s
         </p>
       </div>
     </Link>
+    </SwipeRow>
   );
 }
 

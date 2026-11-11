@@ -19,7 +19,7 @@ const KINDS: { v: Kind; label: string; active: string }[] = [
 ];
 
 export function TransactionForm({
-  accounts, categories, tx, defaultTime, returnTo, initialKind = "Expense",
+  accounts, categories, tx, defaultTime, returnTo, initialKind = "Expense", transfer,
 }: {
   accounts: Account[];
   categories: Category[];
@@ -27,11 +27,17 @@ export function TransactionForm({
   defaultTime: string;
   returnTo: string;
   initialKind?: Kind;
+  /** Khi sửa chuyển khoản: tài khoản nguồn và đích (lấy từ 2 vế). */
+  transfer?: { fromId: string; toId: string };
 }) {
   const isTransferTx = tx?.categoryId === "transfer";
   const [kind, setKind] = useState<Kind>(isTransferTx ? "Transfer" : (tx?.type ?? initialKind));
-  const [accountId, setAccountId] = useState(tx?.accountId ?? accounts.find((a) => !a.assetUnit)?.id ?? accounts[0]?.id ?? "");
-  const [toAccountId, setToAccountId] = useState(accounts.find((a) => a.id !== accountId && !a.assetUnit)?.id ?? "");
+  const [accountId, setAccountId] = useState(
+    transfer?.fromId ?? tx?.accountId ?? accounts.find((a) => !a.assetUnit)?.id ?? accounts[0]?.id ?? "",
+  );
+  const [toAccountId, setToAccountId] = useState(
+    transfer?.toId ?? accounts.find((a) => a.id !== (transfer?.fromId ?? tx?.accountId) && !a.assetUnit)?.id ?? "",
+  );
   const [categoryId, setCategoryId] = useState(tx?.categoryId ?? "");
   const account = accounts.find((a) => a.id === accountId);
 
@@ -79,7 +85,7 @@ export function TransactionForm({
 
       {isTransferTx && (
         <p className="rounded-2xl bg-sky-50 px-4 py-3 text-[13px] text-sky-800">
-          Đây là một vế của giao dịch chuyển khoản. Để thay đổi, hãy xóa (xóa cả 2 vế) rồi tạo lại.
+          Chuyển khoản gồm 2 giao dịch (trừ tiền ở tài khoản chuyển, cộng ở tài khoản nhận). Sửa ở đây sẽ cập nhật cả hai.
         </p>
       )}
 
@@ -109,9 +115,9 @@ export function TransactionForm({
           <input
             id="title"
             name="title"
-            defaultValue={tx?.title ?? ""}
+            defaultValue={isTransferTx ? "" : (tx?.title ?? "")}
             className="input"
-            placeholder={kind === "Transfer" ? "Chuyển tiền" : "vd. Ăn trưa, đi chợ..."}
+            placeholder={isTransferTx ? "Để trống = giữ nội dung cũ" : kind === "Transfer" ? "Chuyển tiền" : "vd. Ăn trưa, đi chợ..."}
           />
         </div>
 
@@ -163,11 +169,9 @@ export function TransactionForm({
         <textarea id="note" name="note" rows={2} defaultValue={tx?.note ?? ""} className="input resize-none" placeholder="Không bắt buộc" />
       </div>
 
-      {!isTransferTx && (
-        <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent px-4 pt-4 pb-[max(env(safe-area-inset-bottom),16px)]">
-          <SubmitButton>{tx ? "Lưu thay đổi" : "Lưu giao dịch"}</SubmitButton>
-        </div>
-      )}
+      <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent px-4 pt-4 pb-[max(env(safe-area-inset-bottom),16px)]">
+        <SubmitButton>{tx ? "Lưu thay đổi" : "Lưu giao dịch"}</SubmitButton>
+      </div>
     </ActionForm>
   );
 }
