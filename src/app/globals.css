@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --color-brand-50: #fff1f6;
+  --color-brand-100: #ffe3ee;
+  --color-brand-200: #fecbdd;
+  --color-brand-500: #f58bb4;
+  --color-brand-600: #ee6b9e;
+  --color-brand-700: #c94a7e;
+  --color-ink: #0f172a;
+  --color-income: #059669;
+  --color-expense: #dc2626;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: #e2e8f0;
+  color: var(--color-ink);
+}
+
+@layer components {
+  .card {
+    @apply rounded-3xl bg-white shadow-[0_1px_2px_rgba(15,23,42,.04),0_4px_16px_rgba(15,23,42,.04)];
+  }
+  .input {
+    @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] outline-none transition
+      placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100;
+  }
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-slate-500;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[15px] font-semibold transition
+      active:scale-[.98] disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply bg-brand-600 text-white shadow-lg shadow-brand-500/30 hover:bg-brand-700;
+  }
+  .btn-ghost {
+    @apply bg-slate-100 text-slate-700 hover:bg-slate-200;
+  }
+  .btn-danger {
+    @apply bg-rose-50 text-rose-600 hover:bg-rose-100;
+  }
+  .chip {
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3.5 py-1.5
+      text-[13px] font-medium text-slate-600 transition;
+  }
+  .chip-active {
+    @apply border-ink bg-ink text-white;
+  }
+  .section-title {
+    @apply px-1 text-[13px] font-semibold uppercase tracking-wide text-slate-400;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* Ẩn số tiền (nút con mắt ở trang tổng quan) */
+.money {
+  transition: filter 0.2s;
+}
+html[data-hide-money] .money {
+  filter: blur(9px);
+  user-select: none;
+}
